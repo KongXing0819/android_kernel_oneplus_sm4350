@@ -1,0 +1,74 @@
+name: Build Android Kernel with NDK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      ksu_variant:
+        description: '选择 KernelSU 变体'
+        required: true
+        default: 'RKSU'
+        type: choice
+        options:
+          - 'Sukisu Ultra'
+          - 'RKSU'
+
+jobs:
+  build:
+    name: Build Kernel
+    runs-on: ubuntu-latest
+
+    env:
+      ARCH: arm64
+      SUBARCH: arm64
+      CLANG_TRIPLE: "aarch64-linux-gnu-"
+      CROSS_COMPILE: "aarch64-linux-gnu-"
+      KBUILD_BUILD_TIMESTAMP: "Mon Oct 20 00:00:00 CST 2025"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: android-ndk-r29
+          key: ${{ runner.os }}-ndk-r29
+
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ hashFiles('**/Makefile', '**/Kconfig*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio libncurses5-dev libssl-dev lz4
+          if [ ! -d "android-ndk-r29" ]; then
+            wget https://dl.google.com/android/repository/android-ndk-r29-linux.zip
+            unzip android-ndk-r29-linux.zip
+          fi
+          echo "NDK_HOME=$PWD/android-ndk-r29" >> $GITHUB_ENV
+          echo "$PWD/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Add KernelSU
+        run: |
+          KSU_TYPE="${{ github.event.inputs.ksu_variant || 'RKSU' }}"
+          ./ksu.sh "$KSU_TYPE"
+      - name: Build Kernel
+        run: |
+          make O=build CC=clang LD=ld.lld AR=llvm-ar AS=llvm-as NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip -j$(nproc --all)
+
+      - name: Move Kernel
+        run: |
+          cp build/arch/arm64/boot/Image build/AnyKernel
+
+      - name: Upload Kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel-${{ env.KSU_TYPE }}
+          path: build/AnyKernel
