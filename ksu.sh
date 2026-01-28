@@ -1,4 +1,5 @@
 #!/bin/bash
+rm -r KernelSU
 case $1 in
   r* | R*)
     echo "Cloning RKSU"
