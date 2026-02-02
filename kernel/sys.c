@@ -612,7 +612,7 @@ error:
 	return retval;
 }
 
-SYSCALL_DEFINE1(setuid, uid_t, uid)
+ SYSCALL_DEFINE1(setuid, uid_t, uid)
 {
 	return __sys_setuid(uid);
 }
