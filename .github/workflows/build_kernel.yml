@@ -1,0 +1,67 @@
+name: Build Android Kernel with NDK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Kernel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: android-ndk-r30-beta1
+          key: ${{ runner.os }}-ndk-r30-beta1
+
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ hashFiles('**/Makefile', '**/Kconfig*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpio libncurses5-dev libssl-dev lz4
+          if [ ! -d "android-ndk-r30-beta1" ]; then
+            wget https://dl.google.com/android/repository/android-ndk-r30-beta1-linux.zip
+            unzip android-ndk-r30-beta1-linux.zip
+          fi
+          echo "NDK_HOME=$PWD/android-ndk-r30-beta1" >> $GITHUB_ENV
+          echo "$PWD/android-ndk-r30-beta1/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Add KernelSU
+        run: |
+          chmod +x ksu.sh
+          ./ksu.sh
+          
+      - name: Build Kernel
+        run: |
+          make O=build LLVM=1 \
+            ARCH=arm64 \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-android- \
+            -j$(nproc --all) \
+            KBUILD_BUILD_TIMESTAMP="Fri Jun 12 06:00:00 UTC 2026" \
+            KBUILD_BUILD_USER="KongXing0819" \
+            KBUILD_BUILD_HOST="GithubRunner" \
+            KBUILD_BUILD_VERSION="1"
+
+#      - name: Move Kernel
+#        run: |
+#          cp build/arch/arm64/boot/Image build/AnyKernel
+
+      - name: Upload Kernel
+        uses: actions/upload-artifact@v4
+        with:
+#          name: AnyKernel-ReSukisSu
+          name: Image-Resukisu
+#          path: build/AnyKernel
+          path: build/arch/arm64/boot/Image
